@@ -1,0 +1,12 @@
+const initial_value = 10
+let count = 1
+count = count + 1
+if count >= 2:
+    print("Passed")
+end if
+unless count < 2:
+    initial_value |> double_value |> print
+end unless
+repeat 5 times:
+    print("Executing step")
+end loop
