@@ -8,6 +8,8 @@ from pathlib import Path
 
 from .lexer import Lexer, LexError
 from .parser import Parser, ParseError
+from .semantic import SemanticAnalyzer
+from .symbols import SemanticError
 
 
 def node_to_dict(value):
@@ -35,14 +37,25 @@ def main():
     parse = commands.add_parser("parse", help="Inspect a .lite syntax tree")
     parse.add_argument("file", type=Path)
 
+    check = commands.add_parser(
+        "check", help="Check syntax and variable binding rules"
+    )
+    check.add_argument("file", type=Path)
+
     args = parser.parse_args()
 
     try:
         source = args.file.read_bytes().decode("utf-8-sig")
 
-        if args.command == "parse":
+        if args.command == "check":
+            program = Parser(source).parse()
+            SemanticAnalyzer().analyze(program)
+            print(f"{args.file}: semantic checks passed")
+
+        elif args.command == "parse":
             program = Parser(source).parse()
             print(json.dumps(node_to_dict(program), indent=2))
+
         else:
             tokens = Lexer(source).tokenize()
             if args.json:
@@ -57,7 +70,10 @@ def main():
                         f"{token.kind:<12}\t{token.lexeme!r}"
                     )
 
-    except (LexError, ParseError, OSError, UnicodeError, ValueError) as error:
+    except (
+        LexError, ParseError, SemanticError,
+        OSError, UnicodeError, ValueError,
+    ) as error:
         print(error, file=sys.stderr)
         return 1
 
