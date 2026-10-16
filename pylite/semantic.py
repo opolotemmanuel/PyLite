@@ -5,6 +5,7 @@ from .nodes import (
     ExpressionStatement, Literal, Name, Program, Repeat, Unary,
 )
 from .symbols import SemanticError, SymbolTable
+from .diagnostics import render
 
 
 class SemanticAnalyzer:
@@ -18,6 +19,7 @@ class SemanticAnalyzer:
         self.initialized: set[str] = set()
 
     def analyze(self, program: Program) -> Program:
+        self.program = program
         # Reset state so the analyzer can check multiple programs.
         self.symbols = SymbolTable()
         self.initialized = set()
@@ -28,6 +30,17 @@ class SemanticAnalyzer:
         return program
 
     def check_statement(self, statement):
+        try:
+            return self._check_statement(statement)
+        except SemanticError as error:
+            span = statement.focus or statement.span
+            if span is not None and not getattr(error, "located", False):
+                error.args = (render("SemanticError", str(error), self.program.source,
+                                     self.program.filename, span),)
+                error.located = True
+            raise
+
+    def _check_statement(self, statement):
         if isinstance(statement, Declaration):
             if statement.name.startswith("__pylite_"):
                 raise SemanticError(
@@ -82,6 +95,17 @@ class SemanticAnalyzer:
             self.initialized = previously_initialized
 
     def check_expression(self, expression):
+        try:
+            return self._check_expression(expression)
+        except SemanticError as error:
+            span = expression.focus or expression.span
+            if span is not None and not getattr(error, "located", False):
+                error.args = (render("SemanticError", str(error), self.program.source,
+                                     self.program.filename, span),)
+                error.located = True
+            raise
+
+    def _check_expression(self, expression):
         if isinstance(expression, Literal):
             return
 

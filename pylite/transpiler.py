@@ -20,6 +20,7 @@ from .semantic import SemanticAnalyzer
 class Transpiler:
     def transpile(self, program):
         SemanticAnalyzer().analyze(program)
+        self.source = program.source
 
         module = ast.Module(
             body=[
@@ -32,6 +33,32 @@ class Transpiler:
         return ast.fix_missing_locations(module)
 
     def statement(self, node):
+        return self.locate(self._statement(node), node.span)
+
+    def locate(self, result, span):
+        if span is None:
+            return result
+
+        def byte_column(offset):
+            start = max(self.source.rfind("\n", 0, offset),
+                        self.source.rfind("\r", 0, offset)) + 1
+            return len(self.source[start:offset].encode("utf-8"))
+
+        # Synthetic helper nodes inherit their originating operation;
+        # child expressions retain their more precise positions.
+        def visit(tree):
+            if isinstance(tree, (ast.expr, ast.stmt)) and not hasattr(tree, "lineno"):
+                tree.lineno = span.line
+                tree.col_offset = byte_column(span.start)
+                tree.end_lineno = span.end_line
+                tree.end_col_offset = byte_column(span.end)
+            for child in ast.iter_child_nodes(tree):
+                visit(child)
+
+        visit(result)
+        return result
+
+    def _statement(self, node):
         if isinstance(node, Declaration):
             return ast.Assign(
                 targets=[
@@ -110,6 +137,9 @@ class Transpiler:
         ] or [ast.Pass()]
 
     def expression(self, node):
+        return self.locate(self._expression(node), node.span)
+
+    def _expression(self, node):
         if isinstance(node, Literal):
             return ast.Constant(value=node.value)
 
@@ -188,4 +218,4 @@ class Transpiler:
 
         raise TypeError(
             f"Unsupported expression: {type(node).__name__}"
-        )                                                                                                                                                                         
+        )
