@@ -4,7 +4,31 @@ PyLite includes a lexer, parser, semantic analyzer, Python AST transpiler,
 and runtime, compatible with Python 3.10+ with no external dependencies.
 Python 3.11+ debug ranges (enabled by default) provide precise runtime spans.
 
-From this folder:
+From the repository folder, create and activate a virtual environment, then
+install the local checkout in editable mode:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+On Windows, activate with `.venv\Scripts\Activate.ps1` in PowerShell instead.
+The distribution is named `pylite-lang`; installation provides the `pylite`
+command. Editable installation uses this checkout, so source edits take effect
+without reinstalling. No runtime dependencies are required.
+
+With the environment active:
+
+```sh
+pylite lex examples/demo.lite
+pylite lex examples/demo.lite --json
+pylite parse examples/demo.lite
+pylite check examples/demo.lite
+pylite run examples/demo.lite
+```
+
+The existing module invocation also works:
 
 ```sh
 python3 -m pylite lex examples/demo.lite
