@@ -1,5 +1,6 @@
 """Recursive-descent parser for PyLite 1.0."""
 
+from .diagnostics import Span
 from .lexer import Lexer
 from .nodes import (
     Assignment, Binary, Call, Conditional, Declaration,
@@ -25,7 +26,8 @@ class ParseError(Exception):
 
 
 class Parser:
-    def __init__(self, source):
+    def __init__(self, source, filename="<pylite>"):
+        self.filename = filename
         self.source = source
         self.tokens = Lexer(source).tokenize()
         self.position = 0
@@ -73,9 +75,28 @@ class Parser:
         self.skip_newlines()
         while self.current.kind != "EOF":
             statements.append(self.statement())
-        return Program(statements)
+        return Program(statements, source=self.source, filename=self.filename,
+                       span=Span.from_offsets(self.source, 0, len(self.source)))
+
+    def located(self, node, start, end=None, focus=None):
+        end = end if end is not None else self.tokens[self.position - 1].end
+        node.span = Span.from_offsets(self.source, start, end)
+        node.focus = focus
+        return node
 
     def statement(self):
+        start_position = self.position
+        start_token = self.current
+        node = self._statement()
+        end = self.position
+        while end > 0 and self.tokens[end - 1].kind == "NEWLINE":
+            end -= 1
+        focus_token = (self.tokens[start_position + 1]
+                       if start_token.kind in ("LET", "CONST") else start_token)
+        return self.located(node, start_token.start, self.tokens[end - 1].end,
+                            Span.from_offsets(self.source, focus_token.start, focus_token.end))
+
+    def _statement(self):
         kind = self.current.kind
 
         if kind in ("LET", "CONST"):
@@ -151,7 +172,10 @@ class Parser:
             if function is None:
                 self.error("Expected a function name after '|>'.")
 
-            expression = Call(function.lexeme, [expression])
+            expression = self.located(
+                Call(function.lexeme, [expression]), expression.span.start,
+                function.end, Span.from_offsets(self.source, function.start, function.end),
+            )
             self.expression_space()
 
         return expression
@@ -163,7 +187,10 @@ class Parser:
 
         if operator:
             right = self.addition()
-            expression = Binary(expression, operator.lexeme, right)
+            expression = self.located(
+                Binary(expression, operator.lexeme, right),
+                expression.span.start, right.span.end,
+            )
             self.expression_space()
 
             if self.current.kind in ("EQ", "NE", "LT", "GT", "LE", "GE"):
@@ -181,7 +208,9 @@ class Parser:
         while self.current.kind in ("PLUS", "MINUS"):
             operator = self.advance().lexeme
             right = self.multiplication()
-            expression = Binary(expression, operator, right)
+            expression = self.located(
+                Binary(expression, operator, right), expression.span.start, right.span.end,
+            )
             self.expression_space()
 
         return expression
@@ -193,7 +222,9 @@ class Parser:
         while self.current.kind in ("STAR", "SLASH"):
             operator = self.advance().lexeme
             right = self.unary()
-            expression = Binary(expression, operator, right)
+            expression = self.located(
+                Binary(expression, operator, right), expression.span.start, right.span.end,
+            )
             self.expression_space()
 
         return expression
@@ -202,14 +233,14 @@ class Parser:
         self.expression_space()
         operator = self.match("PLUS", "MINUS")
         if operator:
-            return Unary(operator.lexeme, self.unary())
+            return self.located(Unary(operator.lexeme, self.unary()), operator.start)
         return self.primary()
 
     def primary(self):
         self.expression_space()
         token = self.match("INTEGER", "STRING", "TRUE", "FALSE")
         if token:
-            return Literal(token.value)
+            return self.located(Literal(token.value), token.start, token.end)
 
         token = self.match("IDENTIFIER", "PRINT")
         if token:
@@ -226,19 +257,24 @@ class Parser:
 
                 self.expect("RPAREN", "Expected ')' after function arguments.")
                 self.parenthesis_depth -= 1
-                return Call(token.lexeme, arguments)
+                return self.located(
+                    Call(token.lexeme, arguments), token.start,
+                    focus=Span.from_offsets(self.source, token.start, token.end),
+                )
 
             if token.kind == "PRINT":
                 self.error("Use print(...) or pass a value through '|> print'.")
 
-            return Name(token.lexeme)
+            return self.located(Name(token.lexeme), token.start, token.end)
 
-        if self.match("LPAREN"):
+        opening = self.match("LPAREN")
+        if opening:
             self.parenthesis_depth += 1
             expression = self.expression()
             self.expression_space()
             self.expect("RPAREN", "Expected ')' after the expression.")
             self.parenthesis_depth -= 1
-            return expression
+            return self.located(expression, opening.start,
+                                focus=expression.focus or expression.span)
 
         self.error("Expected a value, variable name, or parenthesized expression.")

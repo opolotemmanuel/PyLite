@@ -1,5 +1,9 @@
 """Execute transpiled PyLite programs."""
 
+import dis
+import sys
+
+from .diagnostics import Span, render, source_lines
 from .parser import Parser
 from .transpiler import Transpiler
 
@@ -27,8 +31,32 @@ def double_value(value):
     return value * 2
 
 
+def runtime_span(code, instruction_offset, source):
+    """Return a precise span only when instruction debug ranges are available."""
+    # Python 3.10 has neither show_caches nor Instruction.positions.
+    if sys.version_info < (3, 11) or not hasattr(code, "co_positions"):
+        return None
+    position = next((getattr(instruction, "positions", None)
+                     for instruction in dis.get_instructions(code, show_caches=True)
+                     if instruction.offset == instruction_offset), None)
+    if position is None or any(value is None for value in (
+            position.lineno, position.end_lineno,
+            position.col_offset, position.end_col_offset)):
+        return None
+
+    lines = source_lines(source)
+
+    def offset(line, column):
+        prefix = sum(len(text) for text in lines[:line - 1])
+        return prefix + len(lines[line - 1].encode("utf-8")[:column].decode("utf-8"))
+
+    return Span.from_offsets(source,
+                             offset(position.lineno, position.col_offset),
+                             offset(position.end_lineno, position.end_col_offset))
+
+
 def run(source, filename="<pylite>"):
-    program = Parser(source).parse()
+    program = Parser(source, filename).parse()
     module = Transpiler().transpile(program)
     code = compile(module, filename, "exec")
 
@@ -56,24 +84,34 @@ def run(source, filename="<pylite>"):
     try:
         exec(code, environment, environment)
 
-    except PyLiteRuntimeError:
-        raise
+    except (PyLiteRuntimeError, ZeroDivisionError, TypeError, NameError) as error:
+        tb = error.__traceback__
+        origin = None
+        while tb is not None:
+            if tb.tb_frame.f_code is code:
+                origin = tb
+            last = tb
+            tb = tb.tb_next
 
-    except ZeroDivisionError:
-        raise PyLiteRuntimeError(
-            "Cannot divide by zero. Check the value after '/'."
-        ) from None
-
-    except TypeError:
-        raise PyLiteRuntimeError(
-            "This operation received incompatible values. "
-            "Check that the operands have suitable types."
-        ) from None
-
-    except NameError as error:
-        raise PyLiteRuntimeError(
-            f"A variable has no value at this point: {error.name}."
-        ) from None
+        # Only translate Python failures raised by generated user operations.
+        # Helper validation raises PyLiteRuntimeError explicitly; helper defects
+        # (including TypeError) must retain their original traceback.
+        if origin is None or (not isinstance(error, PyLiteRuntimeError)
+                              and last is not origin):
+            raise
+        span = runtime_span(code, origin.tb_lasti, source)
+        if isinstance(error, ZeroDivisionError):
+            message = "Cannot divide by zero. Check the value after '/'."
+        elif isinstance(error, TypeError):
+            message = ("This operation received incompatible values. "
+                       "Check that the operands have suitable types.")
+        elif isinstance(error, NameError):
+            message = f"A variable has no value at this point: {error.name}."
+        else:
+            message = str(error)
+        diagnostic = render("RuntimeError", message, source, filename, span,
+                            line=origin.tb_lineno)
+        raise PyLiteRuntimeError(diagnostic) from None
 
     return {
         name: value

@@ -1,13 +1,21 @@
 """Syntax tree nodes produced by the PyLite parser."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from .diagnostics import Span
 
 
-class Expression:
+@dataclass(kw_only=True)
+class Located:
+    span: Span | None = field(default=None, compare=False)
+    focus: Span | None = field(default=None, compare=False)
+
+
+class Expression(Located):
     """Base class for expressions."""
 
 
-class Statement:
+class Statement(Located):
     """Base class for statements."""
 
 
@@ -72,5 +80,7 @@ class Repeat(Statement):
 
 
 @dataclass
-class Program:
+class Program(Located):
     statements: list[Statement]
+    source: str = field(default="", compare=False, repr=False)
+    filename: str = field(default="<pylite>", compare=False)
