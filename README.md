@@ -1,48 +1,106 @@
-# PyLite 1.0 lexer
+# PyLite 1.0
 
-A working lexer for your language concept, requiring Python 3.10+ and no external packages. This is the lexical stage; it does not yet execute PyLite programs.
+PyLite includes a lexer, parser, semantic analyzer, Python AST transpiler,
+and runtime, compatible with Python 3.10+ with no external dependencies.
+Python 3.11+ debug ranges (enabled by default) provide precise runtime spans.
 
 From this folder:
 
 ```sh
-python -m pylite lex examples/demo.lite
-python -m pylite lex examples/demo.lite --json
-python -m unittest discover -s tests -v
+python3 -m pylite lex examples/demo.lite
+python3 -m pylite lex examples/demo.lite --json
+python3 -m pylite parse examples/demo.lite
+python3 -m pylite check examples/demo.lite
+python3 -m pylite run examples/demo.lite
+python3 -m unittest discover -s tests -v
 ```
 
 Python API:
 
 ```python
 from pylite import Lexer
+from pylite.parser import Parser
+from pylite.runtime import run
+
 tokens = Lexer('let count = 1\n').tokenize()
+program = Parser('let count = 1\n', filename='demo.lite').parse()
+values = run('let count = 1\nprint(count)\n', filename='demo.lite')
 ```
 
-## Rules and decisions
+## Language rules
 
-- Keywords: `let const if unless repeat times end loop print true false`. `loop` is added because `end loop` requires it.
-- Identifiers use ASCII letters or underscore, followed by ASCII letters, digits, or underscores; keywords are case-sensitive.
-- Integers contain decimal digits. Negative numbers produce `MINUS` then `INTEGER`, allowing a parser to distinguish negation from subtraction.
-- Boolean tokens have Python boolean values. Double-quoted strings decode `\n`, `\t`, `\r`, `\"`, and `\\`. Raw newlines and unknown escapes are errors.
-- All documented operators are supported with longest-match recognition. Parentheses, colon, and comma support calls and the examples' block syntax.
-- Indentation is ignored. Tabs use four-column tab stops for diagnostics. Newlines are retained as statement boundaries; a parser can ignore them inside parentheses.
-- `#` begins a comment through line end. LF, CRLF, and CR are supported. The CLI accepts UTF-8 with an optional BOM.
-- Each token carries its kind, original lexeme, decoded value, one-based line and visual column, and zero-based start/end offsets. End offsets are exclusive. Every stream ends in `EOF`.
-- `end if`, `end unless`, and `end loop` are separate keyword tokens; a parser checks valid combinations and nesting.
+- Keywords: `let const if unless repeat times end loop print true false`.
+  Identifiers use ASCII letters or underscore followed by ASCII letters,
+  digits, or underscores. Keywords are case-sensitive.
+- Integers contain decimal digits; unary `+` and `-` are supported. Booleans
+  and double-quoted strings are values. Strings decode `\n`, `\t`, `\r`,
+  `\"`, and `\\`. Raw newlines and unknown escapes are errors.
+- Arithmetic precedence is unary, then `* /`, then `+ -`, then comparisons,
+  then pipelines (`value |> double_value |> print`). Arithmetic is left
+  associative. Division uses Python's true division. Comparisons are
+  `== != < > <= >=`; chained comparisons are rejected.
+- `let` declares mutable variables, `const` declares constants, and assignment
+  requires an existing mutable binding. Declarations are program-wide;
+  declarations inside optional blocks may be uninitialized afterward.
+  Redeclaration is rejected both statically and during repeated execution.
+  Builtin function names and the `__pylite_` prefix are reserved.
+- Builtins are `print(...)` and `double_value(number)`. Pipelines pass one
+  argument. `repeat count times:` requires a nonnegative integer (not a
+  boolean), evaluates its count once, and closes with `end loop`.
+  `if condition:` and `unless condition:` close with `end if` and `end unless`.
+- Indentation is ignored. Explicit `end` blocks delimit bodies, so no
+  `INDENT` or `DEDENT` tokens are emitted. `#` starts a line comment.
+  Newlines separate statements; parentheses allow multiline expressions.
+  LF, CRLF, and CR are supported. The CLI accepts UTF-8 with an optional BOM.
+- Floats as literals, scientific notation, single-quoted strings, multiline
+  comments, user-defined functions, and implicit declarations are unsupported.
 
-## Reference ambiguities
+## Source locations and diagnostics
 
-The main v1.0 specification defines integers and double-quoted strings, while the team breakdown requests floats, scientific notation, and single quotes. This implementation follows the main specification. Multiline comments have no delimiter defined, so only `#` line comments are supported. These extensions need syntax decisions before implementation.
+Tokens have one-based line and visual column numbers and zero-based Unicode
+character offsets. Parsed nodes retain optional `span` and `focus` metadata;
+spans include exclusive end offsets and end positions. Program nodes retain
+source text and filename. Existing positional node constructors and structural
+equality remain compatible; manually constructed nodes may omit locations.
+The `parse` JSON output includes the new metadata.
 
-The manual says implicit assignment is invalid but also shows reassignment of a declared `let` variable. Interpret this as: assignment is valid after declaration. Declaration checks, scope, reserved names in binding positions, and `const` reassignment belong to the parser or semantic/runtime stages, not the lexer.
+Semantic errors identify the relevant variable or function. Runtime errors for
+zero division, incompatible operands, invalid repeat counts, repeated declarations,
+and invalid `double_value` arguments identify the originating `.lite` operation,
+including failures raised by runtime helpers. For example:
 
-Arithmetic precedence, pipeline precedence, available callable functions, division semantics, and zero/negative repeat counts still need definition before a complete interpreter can be built. The example's `double_value` requires a builtin or a future function-definition feature.
+```text
+PyLite RuntimeError [demo.lite, Line 3, Col 7]:
+Cannot divide by zero. Check the value after '/'.
+3 | print(10 / 0)
+          ^^^^^^
+```
 
-## Next stages
+Columns and carets use four-column tab stops, matching the lexer. Python AST
+columns use UTF-8 byte offsets internally, so non-ASCII string content before
+an operation does not shift its diagnostic. CLI language errors go to stderr
+with exit status 1 and no internal traceback; stdout printed before a runtime
+failure is preserved. Unexpected compiler or helper defects are allowed to
+propagate for debugging.
 
-1. Define expression precedence and statement grammar.
-2. Parse tokens into syntax nodes and validate block endings.
-3. Check declarations and mutable/immutable bindings.
-4. Translate nodes into Python AST with a controlled set of builtins.
-5. Execute and translate runtime errors into PyLite diagnostics.
+Limits: a multiline span highlights only its first line. A helper-generated
+operation may highlight its entire declaration or repeat header. Columns count
+Unicode code points after tab expansion, not terminal display widths for wide
+characters or combining marks.
 
-The explicit `end` blocks mean the lexer deliberately emits no `INDENT` or `DEDENT` tokens.
+On Python 3.10, or when Python 3.11+ debug ranges are unavailable (for example,
+with `-X no_debug_ranges`), runtime diagnostics fall back to the original
+`.lite` traceback line, including its source text. These line-only diagnostics
+omit the column and caret rather than inventing an exact location:
+
+```text
+PyLite RuntimeError [demo.lite, Line 3]:
+Cannot divide by zero. Check the value after '/'.
+3 | print(10 / 0)
+```
+
+The fallback also applies to runtime helper errors and preserves the same CLI
+stderr, exit status, and stdout behavior.
+
+Hand-built trees without source metadata retain synthetic AST positions and are intended for structural/compiler use, not source diagnostics.
+Lexical and parse errors retain their existing line/column format.

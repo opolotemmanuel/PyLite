@@ -57,12 +57,12 @@ def main():
             run(source, filename=str(args.file))
 
         elif args.command == "check":
-            program = Parser(source).parse()
+            program = Parser(source, filename=str(args.file)).parse()
             SemanticAnalyzer().analyze(program)
             print(f"{args.file}: semantic checks passed")
 
         elif args.command == "parse":
-            program = Parser(source).parse()
+            program = Parser(source, filename=str(args.file)).parse()
             print(json.dumps(node_to_dict(program), indent=2))
 
         else:
@@ -87,7 +87,6 @@ def main():
         PyLiteRuntimeError,
         OSError,
         UnicodeError,
-        ValueError,
     ) as error:
         print(error, file=sys.stderr)
         return 1
