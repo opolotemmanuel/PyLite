@@ -27,6 +27,13 @@ program = Parser('let count = 1\n', filename='demo.lite').parse()
 values = run('let count = 1\nprint(count)\n', filename='demo.lite')
 ```
 
+## Continuous integration
+
+[GitHub Actions](.github/workflows/ci.yml) runs the unittest suite and demo on
+Python 3.10, 3.11, and 3.12 for pushes to `main`, pull requests targeting `main`,
+and manual dispatch. Python 3.11 and 3.12 also run the suite with debug ranges
+disabled. Matrix jobs run independently, with no external Python packages needed.
+
 ## Language rules
 
 - Keywords: `let const if unless repeat times end loop print true false`.
