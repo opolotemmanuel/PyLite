@@ -29,6 +29,12 @@ class SemanticAnalyzer:
 
     def check_statement(self, statement):
         if isinstance(statement, Declaration):
+            if statement.name.startswith("__pylite_"):
+                raise SemanticError(
+                    "Names starting with '__pylite_' are reserved "
+                    "for the compiler. Choose another variable name."
+                )
+
             if statement.name in self.builtins:
                 raise SemanticError(
                     f"'{statement.name}' is a built-in function name. "
@@ -40,7 +46,6 @@ class SemanticAnalyzer:
             self.symbols.declare(statement.name, statement.mutable)
             self.initialized.add(statement.name)
             return
-
         if isinstance(statement, Assignment):
             self.symbols.require_mutable(statement.name)
             self.check_expression(statement.value)
