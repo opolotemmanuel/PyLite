@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .lexer import Lexer, LexError
 from .parser import Parser, ParseError
+from .runtime import run, PyLiteRuntimeError
 from .semantic import SemanticAnalyzer
 from .symbols import SemanticError
 
@@ -21,8 +22,10 @@ def node_to_dict(value):
                 for field in fields(value)
             },
         }
+
     if isinstance(value, list):
         return [node_to_dict(item) for item in value]
+
     return value
 
 
@@ -42,12 +45,18 @@ def main():
     )
     check.add_argument("file", type=Path)
 
+    execute = commands.add_parser("run", help="Execute a .lite program")
+    execute.add_argument("file", type=Path)
+
     args = parser.parse_args()
 
     try:
         source = args.file.read_bytes().decode("utf-8-sig")
 
-        if args.command == "check":
+        if args.command == "run":
+            run(source, filename=str(args.file))
+
+        elif args.command == "check":
             program = Parser(source).parse()
             SemanticAnalyzer().analyze(program)
             print(f"{args.file}: semantic checks passed")
@@ -58,6 +67,7 @@ def main():
 
         else:
             tokens = Lexer(source).tokenize()
+
             if args.json:
                 print(json.dumps(
                     [token.to_dict() for token in tokens],
@@ -71,8 +81,13 @@ def main():
                     )
 
     except (
-        LexError, ParseError, SemanticError,
-        OSError, UnicodeError, ValueError,
+        LexError,
+        ParseError,
+        SemanticError,
+        PyLiteRuntimeError,
+        OSError,
+        UnicodeError,
+        ValueError,
     ) as error:
         print(error, file=sys.stderr)
         return 1
