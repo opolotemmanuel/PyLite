@@ -1,0 +1,19 @@
+const greeting = "Hello, PyLite!"
+print(greeting)
+
+let count = 0
+
+repeat 3 times:
+    count = count + 1
+    print(count)
+end loop
+
+if count == 3:
+    print("Loop completed")
+end if
+
+unless count < 3:
+    print("Target reached")
+end unless
+
+count |> double_value |> print
