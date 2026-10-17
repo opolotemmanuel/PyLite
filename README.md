@@ -87,6 +87,10 @@ disabled. Matrix jobs run independently, with no external Python packages needed
 - Keywords: `let const if unless repeat times end loop print true false`.
   Identifiers use ASCII letters or underscore followed by ASCII letters,
   digits, or underscores. Keywords are case-sensitive.
+  [`pylite/keywords.py`](pylite/keywords.py) classifies words and pre-checks
+  the token stream before parsing, so `let if = 1` or `end = 3` reports that
+  a reserved keyword cannot be a variable name. The pre-check also records
+  each declaration with its block depth in a `ScopedSymbolTable`.
 - Integers contain decimal digits; unary `+` and `-` are supported. Booleans
   and double-quoted strings are values. Strings decode `\n`, `\t`, `\r`,
   `\"`, and `\\`. Raw newlines and unknown escapes are errors.

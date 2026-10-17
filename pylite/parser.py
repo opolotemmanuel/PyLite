@@ -1,6 +1,7 @@
 """Recursive-descent parser for PyLite 1.0."""
 
 from .diagnostics import Span
+from .keywords import precheck
 from .lexer import Lexer
 from .nodes import (
     Assignment, Binary, Call, Conditional, Declaration,
@@ -30,6 +31,7 @@ class Parser:
         self.filename = filename
         self.source = source
         self.tokens = Lexer(source).tokenize()
+        self.symbols = precheck(self.tokens, source)
         self.position = 0
         self.parenthesis_depth = 0
 

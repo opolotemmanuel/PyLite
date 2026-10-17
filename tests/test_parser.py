@@ -6,6 +6,7 @@ import sys
 import unittest
 from pathlib import Path
 
+from pylite.keywords import ReservedWordError
 from pylite.nodes import (
     Assignment, Binary, Call, Conditional, Declaration,
     Literal, Name, Repeat, Unary,
@@ -121,7 +122,6 @@ class ParserTests(unittest.TestCase):
 
     def test_invalid_syntax(self):
         invalid_sources = [
-            "let if = 1\n",
             "let x 1\n",
             "let x =\n",
             "let x = 1 let y = 2\n",
@@ -136,6 +136,11 @@ class ParserTests(unittest.TestCase):
             with self.subTest(source=source):
                 with self.assertRaises(ParseError):
                     self.parse(source)
+
+    def test_reserved_word_as_name(self):
+        # Caught by the keyword pre-check before parsing starts.
+        with self.assertRaisesRegex(ReservedWordError, "'if' is a reserved keyword"):
+            self.parse("let if = 1\n")
 
     def test_error_position(self):
         with self.assertRaises(ParseError) as caught:
