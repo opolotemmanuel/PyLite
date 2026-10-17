@@ -39,6 +39,30 @@ python3 -m pylite run examples/demo.lite
 python3 -m unittest discover -s tests -v
 ```
 
+## Beginner tutorial
+
+[`examples/tutorial.lite`](examples/tutorial.lite) demonstrates constants,
+mutable variables, a repeat loop, conditionals, and a pipeline. From the
+repository folder, with the virtual environment active, check and run it
+using the installed command:
+
+```sh
+pylite check examples/tutorial.lite
+pylite run examples/tutorial.lite
+```
+
+The program prints:
+
+```text
+Hello, PyLite!
+1
+2
+3
+Loop completed
+Target reached
+6
+```
+
 Python API:
 
 ```python

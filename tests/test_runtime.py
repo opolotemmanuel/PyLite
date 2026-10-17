@@ -146,6 +146,24 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(SemanticError, "reserved"):
             self.execute("let __pylite_repeat = 2\n")
 
+    def test_tutorial_cli(self):
+        root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "pylite", "run",
+                "examples/tutorial.lite",
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(
+            result.stdout,
+            "Hello, PyLite!\n1\n2\n3\nLoop completed\nTarget reached\n6\n",
+        )
+
     def test_run_cli(self):
         root = Path(__file__).resolve().parents[1]
         result = subprocess.run(
