@@ -42,7 +42,7 @@ class LexerTests(unittest.TestCase):
             self.assertEqual("let x=1\r\n\tprint(x)"[t.start:t.end], t.lexeme)
 
     def test_invalid_inputs(self):
-        for source in ['@', '$', '&', '|', '!', "'hello'", '1.2', '1e3', '42name', '"unterminated', '"a\nb"', '"\\q"']:
+        for source in ['@', '$', '&', '|', '!', '1.2.3', '1e+', '42name', '"unterminated', '"a\nb"', '"\\q"']:
             with self.subTest(source=source), self.assertRaises(LexError):
                 Lexer(source).tokenize()
 

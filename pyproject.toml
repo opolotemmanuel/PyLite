@@ -1,16 +1,17 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pylite-lang"
-version = "1.0.0"
+version = "1.1.0"
 readme = "README.md"
+description = "An educational language with explicit blocks and a Python AST runtime"
 requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
 pylite = "pylite.__main__:main"
 
-[tool.setuptools]
-packages = ["pylite"]
+[tool.setuptools.packages.find]
+include = ["pylite*"]

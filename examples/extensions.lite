@@ -1,0 +1,17 @@
+# PyLite extensions beyond the original v1.0 syntax.
+#| This comment can span lines.
+   #| Nested comments are supported, too. |#
+|#
+const pi = 3.14
+let scale = 1e3
+let small = 2.5e-2
+print('Literals:', pi, scale, small)
+print('It\'s PyLite', "say \"hello\"", 'backslash: \\')
+small |> double_value |> print
+let total = 0
+repeat 2 times:
+    #| An inline comment |# total = total + 1
+end loop
+if total == 2:
+    print('Nested blocks still work:', total)
+end if

@@ -1,3 +1,31 @@
+"""Source-located diagnostics shared by each language stage."""
+
+
+class SourceError(Exception):
+    category = 'Error'
+
+    def __init__(self, message, line, column, source=None):
+        self.message, self.line, self.column = message, line, column
+        text = f'PyLite {self.category} [Line {line}, Col {column}]: {message}'
+        if source is not None:
+            # str.splitlines also splits characters permitted inside string values.
+            lines = source.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+            snippet = lines[line - 1].expandtabs(4) if 0 < line <= len(lines) else ''
+            prefix = f'{line} | '
+            text += f"\n{prefix}{snippet}\n{' ' * (len(prefix) + column - 1)}^"
+        super().__init__(text)
+
+
+class ResourceError(SourceError):
+    category = 'ResourceError'
+
+
+def resource_error(error, source=None, line=1, column=1):
+    message = ('Program nesting or expression depth exceeds the host limit.'
+               if isinstance(error, RecursionError) else 'Not enough memory to process this program.')
+    return ResourceError(message, line, column, source)
+
+
 """Source spans and shared diagnostic rendering.
 
 Offsets count Unicode characters; AST columns count UTF-8 bytes.

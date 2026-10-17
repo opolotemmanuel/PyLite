@@ -1,0 +1,16 @@
+Hello 1
+Hello 2
+Hello 3
+Done
+6
+Numbers: 3.14 1000.0 0.025
+Quotes: It's PyLite "double" \
+Escapes: 3 2 false
+Math: 14 20 5 2.5 4 -4
+Compare: true true true true true true false
+Concat: PyLite
+Nested: 4
+Builtins: 7 5 true 42
+6
+Multiline: 3
+Dynamic: changed

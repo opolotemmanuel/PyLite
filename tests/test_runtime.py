@@ -1,186 +1,116 @@
-"""Tests for PyLite transpilation and execution."""
-
-import contextlib
-import io
+import ast
 import subprocess
 import sys
 import unittest
 from pathlib import Path
-
-from pylite.runtime import run, PyLiteRuntimeError
-from pylite.symbols import SemanticError
-
+from pylite import run, Parser, ParseError, RuntimeError, transpile
 
 class RuntimeTests(unittest.TestCase):
     def execute(self, source):
-        output = io.StringIO()
-        with contextlib.redirect_stdout(output):
-            variables = run(source)
-        return output.getvalue(), variables
+        output = []
+        runtime = run(source, output=output.append)
+        return output, runtime.variables
 
-    def test_empty_program(self):
-        output, variables = self.execute("")
-        self.assertEqual(output, "")
-        self.assertEqual(variables, {})
+    def test_bindings_arithmetic(self):
+        output, variables = self.execute('let x = 1\nx = x + 1\nprint(x, 2+3*4, (2+3)*4, -10, 5/2)')
+        self.assertEqual(output, ['2 14 20 -10 2.5'])
+        self.assertEqual(variables, {'x': 2})
 
-    def test_arithmetic_and_assignment(self):
-        output, variables = self.execute(
-            "let count = 2 + 3 * 4\n"
-            "count = count - 1\n"
-            "print(count)\n"
-        )
-        self.assertEqual(output, "13\n")
-        self.assertEqual(variables["count"], 13)
+    def test_constants(self):
+        with self.assertRaisesRegex(RuntimeError, "Cannot change constant"):
+            run('const x = 1\nx = 2')
 
-    def test_division(self):
-        _, variables = self.execute("let value = 5 / 2\n")
-        self.assertEqual(variables["value"], 2.5)
+    def test_undeclared_and_duplicate(self):
+        for source in ('x = 1', 'print(x)', 'let x=1\nlet x=2', 'let len=2'):
+            with self.subTest(source=source), self.assertRaises(RuntimeError):
+                run(source)
 
     def test_conditionals(self):
-        output, _ = self.execute(
-            'if true:\nprint("if")\nend if\n'
-            'unless false:\nprint("unless")\nend unless\n'
-            'if false:\nprint("hidden")\nend if\n'
-        )
-        self.assertEqual(output, "if\nunless\n")
-
-    def test_pipeline(self):
-        output, _ = self.execute("10 |> double_value |> print\n")
-        self.assertEqual(output, "20\n")
-
-    def test_repeat(self):
-        output, variables = self.execute(
-            "let count = 0\n"
-            "repeat 3 times:\n"
-            "count = count + 1\n"
-            "end loop\n"
-            "print(count)\n"
-        )
-        self.assertEqual(output, "3\n")
-        self.assertEqual(variables, {"count": 3})
+        source = 'if true:\nprint("yes")\nend if\nunless false:\nprint("also")\nend unless\nif false:\nprint("no")\nend if'
+        self.assertEqual(self.execute(source)[0], ['yes', 'also'])
 
     def test_nested_loops(self):
-        _, variables = self.execute(
-            "let count = 0\n"
-            "repeat 2 times:\n"
-            "repeat 3 times:\n"
-            "count = count + 1\n"
-            "end loop\n"
-            "end loop\n"
-        )
-        self.assertEqual(variables["count"], 6)
-
-    def test_repeat_count_evaluated_once(self):
-        _, variables = self.execute(
-            "let count = 3\n"
-            "let steps = 0\n"
-            "repeat count times:\n"
-            "count = 0\n"
-            "steps = steps + 1\n"
-            "end loop\n"
-        )
-        self.assertEqual(variables["steps"], 3)
+        source = 'let n=0\nrepeat 2 times:\nrepeat 3 times:\nn=n+1\nend loop\nend loop\nprint(n)'
+        self.assertEqual(self.execute(source)[0], ['6'])
 
     def test_zero_repeat(self):
-        output, _ = self.execute(
-            'repeat 0 times:\nprint("hidden")\nend loop\n'
-        )
-        self.assertEqual(output, "")
+        self.assertEqual(self.execute('repeat 0 times:\nprint("no")\nend loop')[0], [])
 
-    def test_repeated_declaration_rejected(self):
-        for keyword in ("let", "const"):
-            with self.subTest(keyword=keyword):
-                with self.assertRaisesRegex(
-                    PyLiteRuntimeError,
-                    "Variable 'value' was declared more than once",
-                ):
-                    self.execute(
-                        "repeat 2 times:\n"
-                        f"{keyword} value = 7\n"
-                        "end loop\n"
-                    )
+    def test_bad_counts(self):
+        for count in ('-1', 'true', '"three"', '3/2'):
+            with self.subTest(count=count), self.assertRaisesRegex(RuntimeError, 'repeat count'):
+                run(f'repeat {count} times:\nend loop')
 
-    def test_declaration_in_single_iteration_loop(self):
-        for keyword in ("let", "const"):
-            with self.subTest(keyword=keyword):
-                output, variables = self.execute(
-                    "repeat 1 times:\n"
-                    f"{keyword} value = 7\n"
-                    "print(value)\n"
-                    "end loop\n"
-                )
-                self.assertEqual(output, "7\n")
-                self.assertEqual(variables, {"value": 7})
+    def test_condition_requires_boolean(self):
+        with self.assertRaisesRegex(RuntimeError, 'condition must'):
+            run('if 1:\nend if')
 
-    def test_separate_runs_have_independent_declarations(self):
-        self.assertEqual(run("let value = 7\n"), {"value": 7})
-        self.assertEqual(run("let value = 9\n"), {"value": 9})
+    def test_pipeline(self):
+        self.assertEqual(self.execute('2 + 3 |> double_value |> print')[0], ['10'])
 
-    def test_invalid_repeat_counts(self):
-        for expression in ("-1", "true", '"three"', "3 / 2"):
-            with self.subTest(expression=expression):
-                with self.assertRaisesRegex(
-                    PyLiteRuntimeError, "nonnegative integer"
-                ):
-                    self.execute(
-                        f"repeat {expression} times:\nend loop\n"
-                    )
+    def test_builtins_strings(self):
+        self.assertEqual(self.execute('print(len("abc"), abs(-2), int("4"), "a"+"b", str(false))')[0], ['3 2 4 ab false'])
 
-    def test_division_by_zero(self):
-        with self.assertRaisesRegex(
-            PyLiteRuntimeError, "Cannot divide by zero"
-        ):
-            self.execute("print(1 / 0)\n")
+    def test_multiline_call(self):
+        self.assertEqual(self.execute('print(\n1 +\n2,\n"ok"\n)')[0], ['3 ok'])
 
-    def test_incompatible_operands(self):
-        with self.assertRaisesRegex(
-            PyLiteRuntimeError, "incompatible values"
-        ):
-            self.execute('print("hello" - 1)\n')
+    def test_runtime_errors_positions(self):
+        with self.assertRaisesRegex(RuntimeError, 'Line 2, Col 8.*divide by zero'):
+            run('let x=2\nprint(x/0)')
 
-    def test_constant_reassignment_rejected(self):
-        with self.assertRaisesRegex(SemanticError, "Cannot reassign"):
-            self.execute("const limit = 3\nlimit = 4\n")
+    def test_invalid_operations(self):
+        for source in ('print(true+1)', 'print("a"-1)', 'print(unknown(1))', 'print(len(2))', 'print(true<1)'):
+            with self.subTest(source=source), self.assertRaises(RuntimeError):
+                run(source)
 
-    def test_reserved_compiler_name(self):
-        with self.assertRaisesRegex(SemanticError, "reserved"):
-            self.execute("let __pylite_repeat = 2\n")
+    def test_comparisons(self):
+        self.assertEqual(self.execute('print(1==1, 1!=2, 1<2, 2>1, 2<=2, 2>=2, true==1)')[0],
+                         ['true true true true true true false'])
 
-    def test_tutorial_cli(self):
+    def test_parse_failures(self):
+        samples = ['end if', 'if true:\nend loop', 'repeat 2:\nend loop', 'if true\nend if',
+                   'let if=1', 'let x=', 'print(1', '1 2', '1 |> 2', '1 < 2 < 3', 'if true:\nprint(1)']
+        for source in samples:
+            with self.subTest(source=source), self.assertRaises(ParseError):
+                Parser(source).parse()
+
+    def test_ast_and_empty(self):
+        self.assertIsInstance(Parser('print(1)').parse(), ast.Module)
+        self.assertIn('_lite_call', transpile('print(1)'))
+        self.assertEqual(self.execute('')[0], [])
+
+    def test_isolated_runs(self):
+        run('let x=1')
+        with self.assertRaises(RuntimeError):
+            run('print(x)')
+
+    def test_examples(self):
         root = Path(__file__).resolve().parents[1]
-        result = subprocess.run(
-            [
-                sys.executable, "-m", "pylite", "run",
-                "examples/tutorial.lite",
-            ],
-            cwd=root,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stderr, "")
-        self.assertEqual(
-            result.stdout,
-            "Hello, PyLite!\n1\n2\n3\nLoop completed\nTarget reached\n6\n",
-        )
+        output, _ = self.execute((root / 'examples/full_program.lite').read_text())
+        self.assertEqual(output, ['PyLite is running', 'Step 1', 'Step 2', 'Halfway to four', 'Step 3',
+                                  'Finished', '6', 'Result: 20', 'true'])
 
-    def test_run_cli(self):
+    def test_cli(self):
         root = Path(__file__).resolve().parents[1]
-        result = subprocess.run(
-            [
-                sys.executable, "-m", "pylite", "run",
-                "examples/demo.lite",
-            ],
-            cwd=root,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(
-            result.stdout,
-            "Passed\n20\n" + "Executing step\n" * 5,
-        )
+        for command in ('run', 'check', 'transpile'):
+            result = subprocess.run([sys.executable, '-m', 'pylite', command, 'examples/full_program.lite'],
+                                    cwd=root, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(result.stdout)
 
+    def test_inline_cli(self):
+        root = Path(__file__).resolve().parents[1]
+        cases = [(['-c', 'print(2 + 3)'], 0, '5\n'),
+                 (['-c', 'let x=2\nx |> double_value |> print'], 0, '4\n'),
+                 (['-c', 'print(1/0)'], 1, ''),
+                 ([], 2, ''),
+                 (['examples/demo.lite', '-c', 'print(1)'], 2, '')]
+        for arguments, status, output in cases:
+            with self.subTest(arguments=arguments):
+                result = subprocess.run([sys.executable, '-m', 'pylite', 'run', *arguments],
+                                        cwd=root, capture_output=True, text=True)
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertEqual(result.stdout, output)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,17 @@
+# Variables, constants, loops, conditions, functions and pipelines.
+const title = "PyLite is running"
+print(title)
+let count = 0
+repeat 3 times:
+    count = count + 1
+    print("Step", count)
+    if count == 2:
+        print("Halfway to four")
+    end if
+end loop
+unless count < 3:
+    print("Finished")
+end unless
+count |> double_value |> print
+print("Result:", (2 + 3) * 4)
+print(true)

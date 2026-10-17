@@ -1,0 +1,53 @@
+# Core acceptance program: mutable variables, constants, blocks and pipelines.
+const greeting = "Hello"
+let count = 0
+repeat 3 times:
+    count = count + 1
+    print(greeting, count)
+end loop
+if count == 3:
+    print("Done")
+end if
+unless count < 3:
+    count |> double_value |> print
+end unless
+
+#| Extensions beyond the original v1.0 syntax.
+   #| This comment is nested. |#
+|#
+print('Numbers:', 3.14, 1e3, 2.5e-2)
+print('Quotes:', 'It\'s PyLite', "\"double\"", "\\")
+print('Escapes:', len("a\nb"), len("\t\r"), str(false))
+print('Math:', 2 + 3 * 4, (2 + 3) * 4, 10 - 3 - 2, 5 / 2, +4, -4)
+print('Compare:', 1 == 1, 1 != 2, 1 < 2, 2 > 1, 2 <= 2, 2 >= 2, true == 1)
+print('Concat:', 'Py' + "Lite")
+
+# Indentation is optional, including in nested blocks.
+let nested = 0
+repeat 2 times:
+repeat 2 times:
+if true:
+nested = nested + 1
+end if
+end loop
+end loop
+repeat 0 times:
+print('ERROR: zero repeat executed')
+end loop
+if false:
+print('ERROR: false condition executed')
+end if
+unless true:
+print('ERROR: inverted true condition executed')
+end unless
+print('Nested:', nested)
+print('Builtins:', abs(-7), len('hello'), str(true), int('42'))
+'-3' |> int |> abs |> double_value |> print
+print(
+    'Multiline:',
+    (1 +
+     2)
+)
+let value = 1
+value = 'changed'
+print('Dynamic:', value)

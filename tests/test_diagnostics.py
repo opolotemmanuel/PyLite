@@ -164,7 +164,7 @@ class DiagnosticsTests(unittest.TestCase):
                     if command == 'run':
                         self.assertEqual(result.stdout, '4\n')
                     elif command == 'check':
-                        self.assertEqual(result.stdout, f'{file}: semantic checks passed\n')
+                        self.assertEqual(result.stdout, 'Syntax is valid. No definite semantic errors.\n')
                     else:
                         self.assertTrue(result.stdout)
 

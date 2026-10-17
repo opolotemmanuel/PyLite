@@ -1,161 +1,168 @@
-# PyLite 1.0
+# PyLite 1.1
 
-PyLite includes a lexer, parser, semantic analyzer, Python AST transpiler,
-and runtime, compatible with Python 3.10+ with no external dependencies.
-Python 3.11+ debug ranges (enabled by default) provide precise runtime spans.
+A runnable educational language with explicit blocks, declared variables, immutable constants, and pipelines. Includes lexer, parser, semantic analyzer, Python AST transpiler, runtime, CLI, examples, tests, and GitHub CI. Requires Python 3.10+; no external runtime dependencies.
 
-From the repository folder, create and activate a virtual environment, then
-install the local checkout in editable mode:
+## Documentation
 
-```sh
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
+Start with the [documentation index](docs/README.md) or
+[installation guide](docs/getting-started.md). The
+[folder map](docs/repository-layout.md) explains where everything belongs.
+[Examples](examples/README.md), [test instructions](tests/README.md), and the
+[development guide](docs/development.md) have their own indexes.
+
+## Run on Windows
+
+Open PowerShell in this folder:
+
+```powershell
+.\pylite.ps1 run examples/full_program.lite
 ```
 
-On Windows, activate with `.venv\Scripts\Activate.ps1` in PowerShell instead.
-The distribution is named `pylite-lang`; installation provides the `pylite`
-command. Editable installation uses this checkout, so source edits take effect
-without reinstalling. No runtime dependencies are required.
+The launcher uses `python` from your PATH (activate your virtual environment first). You can supply `-PythonPath 'C:\path\to\python.exe'` explicitly. If your computer restricts PowerShell scripts, use the Python commands below directly.
 
-With the environment active:
+## Commands
+
+Run code directly without a file:
+
+```powershell
+.\pylite.ps1 run -c 'print(2 + 3)'
+```
+
+For multiple lines in PowerShell:
+
+```powershell
+$code = @'
+let count = 1
+count = count + 1
+print(count)
+'@
+.\pylite.ps1 run -c $code
+```
 
 ```sh
-pylite lex examples/demo.lite
-pylite lex examples/demo.lite --json
-pylite parse examples/demo.lite
-pylite check examples/demo.lite
+python -m pylite run examples/full_program.lite
+python -m pylite run -c 'print(2 + 3)'
+python -m pylite lex examples/demo.lite
+python -m pylite lex examples/demo.lite --json
+python -m pylite check examples/demo.lite
+python -m pylite transpile examples/demo.lite
+python -m unittest discover -s tests -v
+```
+
+Install from this repository in a fresh virtual environment (Python 3.10+):
+
+```sh
+python -m venv .venv
+# Linux/macOS:
+source .venv/bin/activate
+# Windows PowerShell instead:
+# .\.venv\Scripts\Activate.ps1
+python -m pip install .
 pylite run examples/demo.lite
 ```
 
-The existing module invocation also works:
+The installed commands work outside the repository; example paths remain relative to your current directory.
+`check` validates syntax and analyzes declarations without execution. Definite errors return 1; possible binding errors produce warnings and return 0. Runtime checks remain active.
+`transpile` shows generated Python helper calls, which require a runtime environment.
 
-```sh
-python3 -m pylite lex examples/demo.lite
-python3 -m pylite lex examples/demo.lite --json
-python3 -m pylite parse examples/demo.lite
-python3 -m pylite check examples/demo.lite
-python3 -m pylite run examples/demo.lite
-python3 -m unittest discover -s tests -v
-```
+## Example
 
-## Beginner tutorial
-
-[`examples/tutorial.lite`](examples/tutorial.lite) demonstrates constants,
-mutable variables, a repeat loop, conditionals, and a pipeline. From the
-repository folder, with the virtual environment active, check and run it
-using the installed command:
-
-```sh
-pylite check examples/tutorial.lite
-pylite run examples/tutorial.lite
-```
-
-The program prints:
+Save as `hello.lite`, then run `python -m pylite run hello.lite`:
 
 ```text
-Hello, PyLite!
-1
-2
-3
-Loop completed
-Target reached
-6
+const greeting = "Hello from PyLite"
+let count = 0
+repeat 3 times:
+    count = count + 1
+    print(greeting, count)
+end loop
+if count == 3:
+    print("Done")
+end if
+count |> double_value |> print
 ```
 
-Python API:
+## Python API
 
 ```python
-from pylite import Lexer
-from pylite.parser import Parser
-from pylite.runtime import run
-
+from pylite import Lexer, Parser, check, run, transpile
 tokens = Lexer('let count = 1\n').tokenize()
-program = Parser('let count = 1\n', filename='demo.lite').parse()
-values = run('let count = 1\nprint(count)\n', filename='demo.lite')
+tree = Parser('print(1 + 2)').parse()
+runtime = run('let count = 1\ncount = count + 1\nprint(count)')
+assert runtime.variables['count'] == 2
+analysis = check('print(missing)')
+assert analysis.errors  # No code was executed.
 ```
 
-## Continuous integration
+Every `run` has fresh variables. Pass `output=some_function` to capture printed lines.
+Language errors expose source line and column with a caret when source text is available. Catchable recursion/memory failures become `ResourceError` diagnostics; this is not a hard resource sandbox.
 
-[GitHub Actions](.github/workflows/ci.yml) runs the unittest suite and demo on
-Python 3.10, 3.11, and 3.12 for pushes to `main`, pull requests targeting `main`,
-and manual dispatch. Python 3.11 and 3.12 also run the suite with debug ranges
-disabled. Matrix jobs run independently, with no external Python packages needed.
+## Structure
 
-## Language rules
+| File | Responsibility |
+| --- | --- |
+| `pylite/lexer.py` | Character scanning, tokens, lexical errors |
+| `pylite/parser.py` | Grammar, blocks, located syntax nodes |
+| `pylite/compiler.py` | Guarded Python AST generation |
+| `pylite/semantic.py` | Definite/possible binding analysis for `check` |
+| `pylite/diagnostics.py` | Shared source diagnostics and resource errors |
+| `pylite/runtime.py` | Bindings, constants, operations, builtins, execution |
+| `pylite/__main__.py` | Commands and error exit codes |
+| `tests/` | Lexer, parser, runtime, and CLI tests |
+| `.github/workflows/ci.yml` | Install and test on Python 3.10–3.14, Linux and Windows |
 
-- Keywords: `let const if unless repeat times end loop print true false`.
-  Identifiers use ASCII letters or underscore followed by ASCII letters,
-  digits, or underscores. Keywords are case-sensitive.
-- Integers contain decimal digits; unary `+` and `-` are supported. Booleans
-  and double-quoted strings are values. Strings decode `\n`, `\t`, `\r`,
-  `\"`, and `\\`. Raw newlines and unknown escapes are errors.
-- Arithmetic precedence is unary, then `* /`, then `+ -`, then comparisons,
-  then pipelines (`value |> double_value |> print`). Arithmetic is left
-  associative. Division uses Python's true division. Comparisons are
-  `== != < > <= >=`; chained comparisons are rejected.
-- `let` declares mutable variables, `const` declares constants, and assignment
-  requires an existing mutable binding. Declarations are program-wide;
-  declarations inside optional blocks may be uninitialized afterward.
-  Redeclaration is rejected both statically and during repeated execution.
-  Builtin function names and the `__pylite_` prefix are reserved.
-- Builtins are `print(...)` and `double_value(number)`. Pipelines pass one
-  argument. `repeat count times:` requires a nonnegative integer (not a
-  boolean), evaluates its count once, and closes with `end loop`.
-  `if condition:` and `unless condition:` close with `end if` and `end unless`.
-- Indentation is ignored. Explicit `end` blocks delimit bodies, so no
-  `INDENT` or `DEDENT` tokens are emitted. `#` starts a line comment.
-  Newlines separate statements; parentheses allow multiline expressions.
-  LF, CRLF, and CR are supported. The CLI accepts UTF-8 with an optional BOM.
-- Floats as literals, scientific notation, single-quoted strings, multiline
-  comments, user-defined functions, and implicit declarations are unsupported.
+See [language rules and grammar](docs/language.md) for exact semantics and decisions resolving the original reference's gaps. Version 1.1 extends the v1.0 syntax with float/scientific literals, single quotes, and nested multiline comments; user-defined functions, imports, collections, `else`, and logical operators are future features.
 
-## Source locations and diagnostics
+The runtime exposes only PyLite helpers to generated code. It is an educational environment, not a resource-limited sandbox for hostile programs. Ctrl+C interrupts execution.
 
-Tokens have one-based line and visual column numbers and zero-based Unicode
-character offsets. Parsed nodes retain optional `span` and `focus` metadata;
-spans include exclusive end offsets and end positions. Program nodes retain
-source text and filename. Existing positional node constructors and structural
-equality remain compatible; manually constructed nodes may omit locations.
-The `parse` JSON output includes the new metadata.
-
-Semantic errors identify the relevant variable or function. Runtime errors for
-zero division, incompatible operands, invalid repeat counts, repeated declarations,
-and invalid `double_value` arguments identify the originating `.lite` operation,
-including failures raised by runtime helpers. For example:
+## Extensions beyond v1.0
 
 ```text
-PyLite RuntimeError [demo.lite, Line 3, Col 7]:
-Cannot divide by zero. Check the value after '/'.
-3 | print(10 / 0)
-          ^^^^^^
+#| Multiline comment
+   #| Nested comment |#
+|#
+const pi = 3.14
+let scale = 1e3
+print('It\'s PyLite', pi, scale, 2.5e-2)
 ```
 
-Columns and carets use four-column tab stops, matching the lexer. Python AST
-columns use UTF-8 byte offsets internally, so non-ASCII string content before
-an operation does not shift its diagnostic. CLI language errors go to stderr
-with exit status 1 and no internal traceback; stdout printed before a runtime
-failure is preserved. Unexpected compiler or helper defects are allowed to
-propagate for debugging.
+Both quote styles accept `\n`, `\t`, `\r`, `\"`, `\'`, and `\\`.
+Decimal points require digits on both sides; exponents require digits.
+`repeat` still requires an integer count (`2.0` is a float and is rejected).
 
-Limits: a multiline span highlights only its first line. A helper-generated
-operation may highlight its entire declaration or repeat header. Columns count
-Unicode code points after tab expansion, not terminal display widths for wide
-characters or combining marks.
-
-On Python 3.10, or when Python 3.11+ debug ranges are unavailable (for example,
-with `-X no_debug_ranges`), runtime diagnostics fall back to the original
-`.lite` traceback line, including its source text. These line-only diagnostics
-omit the column and caret rather than inventing an exact location:
-
-```text
-PyLite RuntimeError [demo.lite, Line 3]:
-Cannot divide by zero. Check the value after '/'.
-3 | print(10 / 0)
+```sh
+python -m pylite run examples/extensions.lite
+python -m pylite lex examples/extensions.lite --json
+python -m pylite check examples/extensions.lite
+python -m pylite check examples/semantic_warning.lite
+pylite run -c "print(3.14, 1e3, 2.5e-2)"
+python tests/installed_smoke.py
 ```
 
-The fallback also applies to runtime helper errors and preserves the same CLI
-stderr, exit status, and stdout behavior.
+The warning example runs successfully, but `check` conservatively warns that its
+conditional declaration might not execute. It recognizes literal booleans and
+literal integer repeat counts, without executing or folding arbitrary expressions.
+See [the current reference](docs/language.md) and [verification results](docs/verification.md).
 
-Hand-built trees without source metadata retain synthetic AST positions and are intended for structural/compiler use, not source diagnostics.
-Lexical and parse errors retain their existing line/column format.
+## Canonical workspace
+
+This project lives at `C:\Users\kingo\Documents\PyLite` (WSL:
+`/mnt/c/Users/kingo/Documents/PyLite`). Open that root folder in VS Code.
+See the [workspace migration report](docs/migration.md) for preserved APIs,
+conflict decisions, and the original destination documentation.
+The distribution name is `pylite-lang`; the command remains `pylite`.
+The source-located syntax-tree command is also available:
+
+```sh
+python -m pylite parse examples/demo.lite
+python -m pylite run examples/tutorial.lite
+```
+
+
+## Manual testing
+
+Run `python -m pylite run examples/manual_test.lite` for a tour of the implemented
+language. Its expected output is saved in `examples/manual_test.expected.txt` and
+shown in the [manual testing guide](docs/manual-testing.md).
+See the [current readiness report](docs/readiness.md) for verified results and
+platform limitations; older verification sections are historical records.

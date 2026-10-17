@@ -1,6 +1,6 @@
 """Recursive-descent parser for PyLite 1.0."""
 
-from .diagnostics import Span
+from .diagnostics import Span, SourceError, resource_error
 from .lexer import Lexer
 from .nodes import (
     Assignment, Binary, Call, Conditional, Declaration,
@@ -8,21 +8,11 @@ from .nodes import (
 )
 
 
-class ParseError(Exception):
+class ParseError(SourceError):
+    category = "SyntaxError"
+
     def __init__(self, message, source, token):
-        lines = source.splitlines()
-        snippet = (
-            lines[token.line - 1].expandtabs(4)
-            if token.line <= len(lines)
-            else ""
-        )
-        prefix = f"{token.line} | "
-        super().__init__(
-            f"PyLite ParseError [Line {token.line}, "
-            f"Col {token.column}]: {message}\n"
-            f"{prefix}{snippet}\n"
-            f"{' ' * (len(prefix) + token.column - 1)}^"
-        )
+        super().__init__(message, token.line, token.column, source)
 
 
 class Parser:
@@ -71,6 +61,12 @@ class Parser:
             self.error("Expected a new line after this statement.")
 
     def parse(self):
+        try:
+            return self._parse()
+        except (RecursionError, MemoryError) as error:
+            raise resource_error(error, self.source, self.current.line, self.current.column) from None
+
+    def _parse(self):
         statements = []
         self.skip_newlines()
         while self.current.kind != "EOF":
@@ -238,7 +234,7 @@ class Parser:
 
     def primary(self):
         self.expression_space()
-        token = self.match("INTEGER", "STRING", "TRUE", "FALSE")
+        token = self.match("INTEGER", "FLOAT", "STRING", "TRUE", "FALSE")
         if token:
             return self.located(Literal(token.value), token.start, token.end)
 

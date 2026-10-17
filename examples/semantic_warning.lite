@@ -1,0 +1,6 @@
+# The analyzer does not evaluate expressions or propagate variable values.
+let ready = true
+if ready:
+    let message = 'This declaration might not execute according to static analysis.'
+end if
+print(message)

@@ -5,3 +5,6 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+# Isolated local readiness verification environment
+.venv-verify/
