@@ -50,3 +50,9 @@ canonical destination now has its own preserved Git history; see
 
 No existing source, tests, examples, or generated artifacts were relocated in the
 organization pass. Their current locations already fit this structure.
+
+
+`lexer_core.py` at the root is a preserved historical scanner skeleton, with
+separate `#[ ... ]#` comment assumptions. It is not the installed language lexer
+and is not imported by `pylite/`. Test the language through `python -m pylite`;
+its lexer is `pylite/lexer.py`, implementing nested `#| ... |#` comments.

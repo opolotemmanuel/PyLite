@@ -5,7 +5,7 @@ param(
     [string[]]$PyLiteArguments
 )
 if (-not $PythonPath) {
-    $pythonCommand = Get-Command python -CommandType Application -ErrorAction SilentlyContinue
+    $pythonCommand = Get-Command python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($pythonCommand) { $PythonPath = $pythonCommand.Source }
 }
 if (-not $PythonPath) {

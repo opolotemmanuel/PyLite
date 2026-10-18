@@ -24,6 +24,11 @@ unless count < 3:
 end unless
 '''
 EXPECTED = ['Hello 1', 'Hello 2', 'Hello 3', 'Done', '6']
+HAS_DEBUG_RANGES = (
+    sys.version_info >= (3, 11)
+    and any(position[2] is not None
+            for position in compile('1 / 0', '<probe>', 'exec').co_positions())
+)
 
 
 class AcceptanceTests(unittest.TestCase):
@@ -62,7 +67,10 @@ class AcceptanceTests(unittest.TestCase):
 
     @staticmethod
     def cli(source):
-        return subprocess.run([sys.executable, '-m', 'pylite', 'run', '-c', source],
+        interpreter = [sys.executable]
+        if 'no_debug_ranges' in sys._xoptions:
+            interpreter += ['-X', 'no_debug_ranges']
+        return subprocess.run([*interpreter, '-m', 'pylite', 'run', '-c', source],
                               cwd=ROOT, capture_output=True, text=True)
 
     def test_invalid_program_cli_diagnostics(self):
@@ -88,7 +96,15 @@ class AcceptanceTests(unittest.TestCase):
                 result = self.cli(source)
                 self.assertEqual(result.returncode, 1, result.stderr)
                 self.assertIn(message, result.stderr)
-                self.assertRegex(result.stderr, r'Line \d+, Col \d+')
+                runtime_case = name in {'division', 'negative count', 'boolean count',
+                                        'fractional count', 'string count', 'condition'}
+                if runtime_case and not HAS_DEBUG_RANGES:
+                    self.assertIn('PyLite RuntimeError [<command>, Line 1]:', result.stderr)
+                    self.assertTrue(result.stderr.rstrip().endswith('1 | ' + source.split('\n')[0]))
+                    self.assertNotIn('Col ', result.stderr)
+                    self.assertNotIn('^', result.stderr)
+                else:
+                    self.assertRegex(result.stderr, r'Line \d+, Col \d+')
                 self.assertNotIn('Traceback', result.stderr)
 
     def test_unicode_diagnostic_line(self):
