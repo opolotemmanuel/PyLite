@@ -15,6 +15,7 @@ class SemanticAnalyzer:
             "print": None,       # Any number of arguments.
             "abs": 1, "len": 1, "str": 1, "int": 1,
             "double_value": 1,   # Exactly one argument.
+            "max": 2, "min": 2,
         }
         self.symbols = SymbolTable()
         self.initialized: set[str] = set()

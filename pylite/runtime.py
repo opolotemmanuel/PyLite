@@ -37,7 +37,8 @@ class Runtime:
         def display(*values):
             output(" ".join(self.format_value(value) for value in values))
         self.functions = {"print": display, "double_value": double_value,
-                          "abs": abs, "len": len, "str": self.format_value, "int": int}
+                          "abs": abs, "len": len, "str": self.format_value, "int": int,
+                          "max": max, "min": min}
 
     @staticmethod
     def format_value(value):
@@ -95,6 +96,14 @@ class Runtime:
                 return self.functions[name](*args)
             except RuntimeError as error:
                 raise RuntimeError(error.message, line, column) from None
+
+        if name in ('max', 'min'):
+            if len(args) != 2:
+                raise BindingError(f"Function '{name}' expects 2 arguments.", line, column)
+            try:
+                return self.functions[name](*args)
+            except (TypeError, ValueError) as error:
+                raise RuntimeError(f"Invalid arguments for '{name}': {error}", line, column) from None
         try:
             return self.functions[name](*args)
         except (TypeError, ValueError, OverflowError) as error:

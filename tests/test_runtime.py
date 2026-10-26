@@ -51,6 +51,16 @@ class RuntimeTests(unittest.TestCase):
     def test_builtins_strings(self):
         self.assertEqual(self.execute('print(len("abc"), abs(-2), int("4"), "a"+"b", str(false))')[0], ['3 2 4 ab false'])
 
+    def test_builtins_max_min(self):
+        self.assertEqual(self.execute('print(max(3, 7), max(-1, -5), max(2.5, 1))')[0], ['7 -1 2.5'])
+        self.assertEqual(self.execute('print(min(3, 7), min(-1, -5), min(2.5, 1))')[0], ['3 -5 1'])
+
+    def test_builtins_max_min_arity(self):
+        for source in ('print(max(1))', 'print(max(1, 2, 3))',
+                       'print(min(1))', 'print(min(1, 2, 3))'):
+            with self.subTest(source=source), self.assertRaises(RuntimeError):
+                run(source)
+
     def test_multiline_call(self):
         self.assertEqual(self.execute('print(\n1 +\n2,\n"ok"\n)')[0], ['3 ok'])
 
